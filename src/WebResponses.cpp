@@ -36,58 +36,56 @@ void* memchr(void* ptr, int ch, size_t count)
 /*
  * Abstract Response
  * */
+/*
 const char* AsyncWebServerResponse::_responseCodeToString(int code) {
-  return reinterpret_cast<const char *>(responseCodeToString(code));
-}
-
-const __FlashStringHelper *AsyncWebServerResponse::responseCodeToString(int code) {
   switch (code) {
-    case 100: return F("Continue");
-    case 101: return F("Switching Protocols");
-    case 200: return F("OK");
-    case 201: return F("Created");
-    case 202: return F("Accepted");
-    case 203: return F("Non-Authoritative Information");
-    case 204: return F("No Content");
-    case 205: return F("Reset Content");
-    case 206: return F("Partial Content");
-    case 300: return F("Multiple Choices");
-    case 301: return F("Moved Permanently");
-    case 302: return F("Found");
-    case 303: return F("See Other");
-    case 304: return F("Not Modified");
-    case 305: return F("Use Proxy");
-    case 307: return F("Temporary Redirect");
-    case 400: return F("Bad Request");
-    case 401: return F("Unauthorized");
-    case 402: return F("Payment Required");
-    case 403: return F("Forbidden");
-    case 404: return F("Not Found");
-    case 405: return F("Method Not Allowed");
-    case 406: return F("Not Acceptable");
-    case 407: return F("Proxy Authentication Required");
-    case 408: return F("Request Time-out");
-    case 409: return F("Conflict");
-    case 410: return F("Gone");
-    case 411: return F("Length Required");
-    case 412: return F("Precondition Failed");
-    case 413: return F("Request Entity Too Large");
-    case 414: return F("Request-URI Too Large");
-    case 415: return F("Unsupported Media Type");
-    case 416: return F("Requested range not satisfiable");
-    case 417: return F("Expectation Failed");
-    case 500: return F("Internal Server Error");
-    case 501: return F("Not Implemented");
-    case 502: return F("Bad Gateway");
-    case 503: return F("Service Unavailable");
-    case 504: return F("Gateway Time-out");
-    case 505: return F("HTTP Version not supported");
-    default:  return F("");
+    case 100: return "Continue";
+    case 101: return "Switching Protocols";
+    case 200: return "OK";
+    case 201: return "Created";
+    case 202: return "Accepted";
+    case 203: return "Non-Authoritative Information";
+    case 204: return "No Content";
+    case 205: return "Reset Content";
+    case 206: return "Partial Content";
+    case 300: return "Multiple Choices";
+    case 301: return "Moved Permanently";
+    case 302: return "Found";
+    case 303: return "See Other";
+    case 304: return "Not Modified";
+    case 305: return "Use Proxy";
+    case 307: return "Temporary Redirect";
+    case 400: return "Bad Request";
+    case 401: return "Unauthorized";
+    case 402: return "Payment Required";
+    case 403: return "Forbidden";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    case 406: return "Not Acceptable";
+    case 407: return "Proxy Authentication Required";
+    case 408: return "Request Time-out";
+    case 409: return "Conflict";
+    case 410: return "Gone";
+    case 411: return "Length Required";
+    case 412: return "Precondition Failed";
+    case 413: return "Request Entity Too Large";
+    case 414: return "Request-URI Too Large";
+    case 415: return "Unsupported Media Type";
+    case 416: return "Requested range not satisfiable";
+    case 417: return "Expectation Failed";
+    case 500: return "Internal Server Error";
+    case 501: return "Not Implemented";
+    case 502: return "Bad Gateway";
+    case 503: return "Service Unavailable";
+    case 504: return "Gateway Time-out";
+    case 505: return "HTTP Version not supported";
+    default:  return "";
   }
 }
-
+*/
 AsyncWebServerResponse::AsyncWebServerResponse()
   : _code(0)
+  , _headers(LinkedList<AsyncWebHeader *>([](AsyncWebHeader *h){ delete h; }))
   , _contentType()
   , _contentLength(0)
   , _sendContentLength(true)
@@ -98,12 +96,14 @@ AsyncWebServerResponse::AsyncWebServerResponse()
   , _writtenLength(0)
   , _state(RESPONSE_SETUP)
 {
-  for(const auto &header: DefaultHeaders::Instance()) {
-    _headers.emplace_back(header);
+  for(auto header: DefaultHeaders::Instance()) {
+    _headers.add(new AsyncWebHeader(header->name(), header->value()));
   }
 }
 
-AsyncWebServerResponse::~AsyncWebServerResponse() = default;
+AsyncWebServerResponse::~AsyncWebServerResponse(){
+  _headers.free();
+}
 
 void AsyncWebServerResponse::setCode(int code){
   if(_state == RESPONSE_SETUP)
@@ -121,38 +121,39 @@ void AsyncWebServerResponse::setContentType(const String& type){
 }
 
 void AsyncWebServerResponse::addHeader(const String& name, const String& value){
-  _headers.emplace_back(name, value);
+  _headers.add(new AsyncWebHeader(name, value));
 }
 
 String AsyncWebServerResponse::_assembleHead(uint8_t version){
   if(version){
-    addHeader(F("Accept-Ranges"), F("none"));
+    addHeader("Accept-Ranges","none");
     if(_chunked)
-      addHeader(F("Transfer-Encoding"), F("chunked"));
+      addHeader("Transfer-Encoding","chunked");
   }
   String out = String();
   int bufSize = 300;
   char buf[bufSize];
 
-  snprintf_P(buf, bufSize, PSTR("HTTP/1.%d %d %s\r\n"), version, _code, _responseCodeToString(_code));
+//  snprintf(buf, bufSize, "HTTP/1.%d %d %s\r\n", version, _code, _responseCodeToString(_code));
+  snprintf(buf, bufSize, "HTTP/1.%d %d\r\n", version, _code);
   out.concat(buf);
 
   if(_sendContentLength) {
-    snprintf_P(buf, bufSize, PSTR("Content-Length: %d\r\n"), _contentLength);
+    snprintf(buf, bufSize, "Content-Length: %d\r\n", _contentLength);
     out.concat(buf);
   }
   if(_contentType.length()) {
-    snprintf_P(buf, bufSize, PSTR("Content-Type: %s\r\n"), _contentType.c_str());
+    snprintf(buf, bufSize, "Content-Type: %s\r\n", _contentType.c_str());
     out.concat(buf);
   }
 
   for(const auto& header: _headers){
-    snprintf_P(buf, bufSize, PSTR("%s: %s\r\n"), header.name().c_str(), header.value().c_str());
+    snprintf(buf, bufSize, "%s: %s\r\n", header->name().c_str(), header->value().c_str());
     out.concat(buf);
   }
-  _headers.clear();
+  _headers.free();
 
-  out.concat(F("\r\n"));
+  out.concat("\r\n");
   _headLength = out.length();
   return out;
 }
@@ -174,9 +175,9 @@ AsyncBasicResponse::AsyncBasicResponse(int code, const String& contentType, cons
   if(_content.length()){
     _contentLength = _content.length();
     if(!_contentType.length())
-      _contentType = F("text/plain");
+      _contentType = "text/plain";
   }
-  addHeader(F("Connection"), F("close"));
+  addHeader("Connection","close");
 }
 
 void AsyncBasicResponse::_respond(AsyncWebServerRequest *request){
@@ -256,7 +257,7 @@ AsyncAbstractResponse::AsyncAbstractResponse(AwsTemplateProcessor callback): _ca
 }
 
 void AsyncAbstractResponse::_respond(AsyncWebServerRequest *request){
-  addHeader(F("Connection"), F("close"));
+  addHeader("Connection","close");
   _head = _assembleHead(request->version());
   _state = RESPONSE_HEADERS;
   _ack(request, 0, 0);
@@ -318,7 +319,7 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest *request, size_t len, u
           free(buf);
           return 0;
       }
-      outLen = sprintf_P((char*)buf+headLen, PSTR("%x"), readLen) + headLen;
+      outLen = sprintf((char*)buf+headLen, "%x", readLen) + headLen;
       while(outLen < headLen + 4) buf[outLen++] = ' ';
       buf[outLen++] = '\r';
       buf[outLen++] = '\n';
@@ -397,7 +398,7 @@ size_t AsyncAbstractResponse::_fillBufferAndProcessTemplates(uint8_t* data, size
     // If closing placeholder is found:
     if(pTemplateEnd) {
       // prepare argument to callback
-      const size_t paramNameLength = std::min((size_t)sizeof(buf) - 1, (size_t)(pTemplateEnd - pTemplateStart - 1));
+      const size_t paramNameLength = std::min(sizeof(buf) - 1, (unsigned int)(pTemplateEnd - pTemplateStart - 1));
       if(paramNameLength) {
         memcpy(buf, pTemplateStart + 1, paramNameLength);
         buf[paramNameLength] = 0;
@@ -484,48 +485,43 @@ AsyncFileResponse::~AsyncFileResponse(){
 }
 
 void AsyncFileResponse::_setContentType(const String& path){
-#if HAVE_EXTERN_GET_CONTENT_TYPE_FUNCTION
-  extern const __FlashStringHelper *getContentType(const String &path);
-  _contentType = getContentType(path);
-#else
-  if (path.endsWith(F(".html"))) _contentType = F("text/html");
-  else if (path.endsWith(F(".htm"))) _contentType = F("text/html");
-  else if (path.endsWith(F(".css"))) _contentType = F("text/css");
-  else if (path.endsWith(F(".json"))) _contentType = F("application/json");
-  else if (path.endsWith(F(".js"))) _contentType = F("application/javascript");
-  else if (path.endsWith(F(".png"))) _contentType = F("image/png");
-  else if (path.endsWith(F(".gif"))) _contentType = F("image/gif");
-  else if (path.endsWith(F(".jpg"))) _contentType = F("image/jpeg");
-  else if (path.endsWith(F(".ico"))) _contentType = F("image/x-icon");
-  else if (path.endsWith(F(".svg"))) _contentType = F("image/svg+xml");
-  else if (path.endsWith(F(".eot"))) _contentType = F("font/eot");
-  else if (path.endsWith(F(".woff"))) _contentType = F("font/woff");
-  else if (path.endsWith(F(".woff2"))) _contentType = F("font/woff2");
-  else if (path.endsWith(F(".ttf"))) _contentType = F("font/ttf");
-  else if (path.endsWith(F(".xml"))) _contentType = F("text/xml");
-  else if (path.endsWith(F(".pdf"))) _contentType = F("application/pdf");
-  else if (path.endsWith(F(".zip"))) _contentType = F("application/zip");
-  else if(path.endsWith(F(".gz"))) _contentType = F("application/x-gzip");
-  else _contentType = F("text/plain");
-#endif
+  if (path.endsWith(".html")) _contentType = "text/html";
+  else if (path.endsWith(".htm")) _contentType = "text/html";
+  else if (path.endsWith(".css")) _contentType = "text/css";
+  else if (path.endsWith(".json")) _contentType = "application/json";
+  else if (path.endsWith(".js")) _contentType = "application/javascript";
+  else if (path.endsWith(".png")) _contentType = "image/png";
+  else if (path.endsWith(".gif")) _contentType = "image/gif";
+  else if (path.endsWith(".jpg")) _contentType = "image/jpeg";
+  else if (path.endsWith(".ico")) _contentType = "image/x-icon";
+  else if (path.endsWith(".svg")) _contentType = "image/svg+xml";
+  else if (path.endsWith(".eot")) _contentType = "font/eot";
+  else if (path.endsWith(".woff")) _contentType = "font/woff";
+  else if (path.endsWith(".woff2")) _contentType = "font/woff2";
+  else if (path.endsWith(".ttf")) _contentType = "font/ttf";
+  else if (path.endsWith(".xml")) _contentType = "text/xml";
+  else if (path.endsWith(".pdf")) _contentType = "application/pdf";
+  else if (path.endsWith(".zip")) _contentType = "application/zip";
+  else if(path.endsWith(".gz")) _contentType = "application/x-gzip";
+  else _contentType = "text/plain";
 }
 
 AsyncFileResponse::AsyncFileResponse(FS &fs, const String& path, const String& contentType, bool download, AwsTemplateProcessor callback): AsyncAbstractResponse(callback){
   _code = 200;
   _path = path;
 
-  if(!download && !fs.exists(_path) && fs.exists(_path + F(".gz"))){
-    _path = _path + F(".gz");
-    addHeader(F("Content-Encoding"), F("gzip"));
+  if(!download && !fs.exists(_path) && fs.exists(_path+".gz")){
+    _path = _path+".gz";
+    addHeader("Content-Encoding", "gzip");
     _callback = nullptr; // Unable to process zipped templates
     _sendContentLength = true;
     _chunked = false;
   }
 
-  _content = fs.open(_path, fs::FileOpenMode::read);
+  _content = fs.open(_path, "r");
   _contentLength = _content.size();
 
-  if(contentType.length() == 0)
+  if(contentType == "")
     _setContentType(path);
   else
     _contentType = contentType;
@@ -536,20 +532,20 @@ AsyncFileResponse::AsyncFileResponse(FS &fs, const String& path, const String& c
 
   if(download) {
     // set filename and force download
-    snprintf_P(buf, sizeof (buf), PSTR("attachment; filename=\"%s\""), filename);
+    snprintf(buf, sizeof (buf), "attachment; filename=\"%s\"", filename);
   } else {
     // set filename and force rendering
-    snprintf_P(buf, sizeof (buf), PSTR("inline; filename=\"%s\""), filename);
+    snprintf(buf, sizeof (buf), "inline; filename=\"%s\"", filename);
   }
-  addHeader(F("Content-Disposition"), buf);
+  addHeader("Content-Disposition", buf);
 }
 
 AsyncFileResponse::AsyncFileResponse(File content, const String& path, const String& contentType, bool download, AwsTemplateProcessor callback): AsyncAbstractResponse(callback){
   _code = 200;
   _path = path;
 
-  if(!download && String(content.name()).endsWith(F(".gz")) && !path.endsWith(F(".gz"))){
-    addHeader(F("Content-Encoding"), F("gzip"));
+  if(!download && String(content.name()).endsWith(".gz") && !path.endsWith(".gz")){
+    addHeader("Content-Encoding", "gzip");
     _callback = nullptr; // Unable to process gzipped templates
     _sendContentLength = true;
     _chunked = false;
@@ -558,7 +554,7 @@ AsyncFileResponse::AsyncFileResponse(File content, const String& path, const Str
   _content = content;
   _contentLength = _content.size();
 
-  if(contentType.length() == 0)
+  if(contentType == "")
     _setContentType(path);
   else
     _contentType = contentType;
@@ -568,11 +564,11 @@ AsyncFileResponse::AsyncFileResponse(File content, const String& path, const Str
   char* filename = (char*)path.c_str() + filenameStart;
 
   if(download) {
-    snprintf_P(buf, sizeof (buf), PSTR("attachment; filename=\"%s\""), filename);
+    snprintf(buf, sizeof (buf), "attachment; filename=\"%s\"", filename);
   } else {
-    snprintf_P(buf, sizeof (buf), PSTR("inline; filename=\"%s\""), filename);
+    snprintf(buf, sizeof (buf), "inline; filename=\"%s\"", filename);
   }
-  addHeader(F("Content-Disposition"), buf);
+  addHeader("Content-Disposition", buf);
 }
 
 size_t AsyncFileResponse::_fillBuffer(uint8_t *data, size_t len){
@@ -672,15 +668,16 @@ size_t AsyncProgmemResponse::_fillBuffer(uint8_t *data, size_t len){
  * Response Stream (You can print/write/printf to it, up to the contentLen bytes)
  * */
 
-AsyncResponseStream::AsyncResponseStream(const String& contentType, size_t bufferSize)
-{
+AsyncResponseStream::AsyncResponseStream(const String& contentType, size_t bufferSize){
   _code = 200;
   _contentLength = 0;
   _contentType = contentType;
-  _content = std::unique_ptr<cbuf>(new cbuf(bufferSize)); //std::make_unique<cbuf>(bufferSize);
+  _content = new cbuf(bufferSize);
 }
 
-AsyncResponseStream::~AsyncResponseStream() = default;
+AsyncResponseStream::~AsyncResponseStream(){
+  delete _content;
+}
 
 size_t AsyncResponseStream::_fillBuffer(uint8_t *buf, size_t maxLen){
   return _content->read((char*)buf, maxLen);

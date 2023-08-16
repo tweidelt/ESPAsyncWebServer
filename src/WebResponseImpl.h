@@ -124,7 +124,7 @@ class cbuf;
 
 class AsyncResponseStream: public AsyncAbstractResponse, public Print {
   private:
-    std::unique_ptr<cbuf> _content;
+    cbuf *_content;
   public:
     AsyncResponseStream(const String& contentType, size_t bufferSize);
     ~AsyncResponseStream();
